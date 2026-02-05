@@ -57,6 +57,18 @@ for (const file of commandFiles) {
 
 console.log(`✅ ${commandFiles.length} comandos carregados`);
 
+// ===== CONECTAR AO MONGODB =====
+const mongoose = require("mongoose");
+
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log("✅ Conectado ao MongoDB");
+  })
+  .catch((error) => {
+    console.error("❌ Erro ao conectar MongoDB:", error);
+  });
+
 // ===== CONECTAR AO DISCORD =====
 client.login(process.env.DISCORD_TOKEN);
 
