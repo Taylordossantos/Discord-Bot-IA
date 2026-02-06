@@ -1,53 +1,66 @@
-const User = require("..user.js");
+const { Client, GatewayIntentBits } = require("discord.js");
+const User = require("../models/user"); // Importa o modelo de usuário do Mongoose
+const cooldowns = new Map(); // Armazena último tempo de XP por userId
 
 module.exports = {
   name: "messageCreate",
-  async execute(message) {
-    // Ignorar mensagens de bot
-    if (message.author.bot) return;
+  async execute(message, client) {
+    // Ignora bots e DMs
+    if (message.author.bot || !message.guild) return;
 
-    // Ignorar mensagens em DM
-    if (!message.guild) return;
+    const userId = message.author.id;
+    const guildId = message.guild.id;
+
+    // Cooldown de 30 segundos
+    const now = Date.now();
+    const cooldownAmount = 30 * 1000; // 30s em milissegundos
+
+    if (cooldowns.has(userId)) {
+      const expirationTime = cooldowns.get(userId) + cooldownAmount;
+
+      if (now < expirationTime) {
+        return; // Ainda em cooldown, não ganha XP
+      }
+    }
+
+    cooldowns.set(userId, now); // Atualiza cooldown
 
     try {
-      // Procurar usuário no banco de dados
+      // XP aleatório entre 10-25
+      const xpToAdd = Math.floor(Math.random() * 16) + 10;
+
       let user = await User.findOne({
-        userId: message.author.id,
-        guildId: message.guild.id,
+        userId: userId,
+        guildId: guildId,
       });
 
-      // Se não existe, criar novo usuário
       if (!user) {
-        user = await User.create({
-          userId: message.author.id,
-          guildId: message.guild.id,
-          xp: 0,
+        // Cria novo usuário
+        user = new User({
+          userId,
+          guildId,
+          xp: xpToAdd,
           level: 1,
         });
+      } else {
+        // Adiciona XP
+        user.xp += xpToAdd;
+
+        // Verifica level up
+        const newLevel = Math.floor(user.xp / 100) + 1;
+        if (newLevel > user.level) {
+          user.level = newLevel;
+          message
+            .reply(
+              `🎉 **${message.author.username}** subiu para **nível ${user.level}**!`,
+            )
+            .catch(() => {});
+        }
       }
 
-      // Ganhar 1-5 XP aleatório por mensagem
-      const xpGanho = Math.floor(Math.random() * 5) + 1;
-      user.xp += xpGanho;
-
-      // Calcular novo nível (XP / 100 = nível)
-      const novoLevel = Math.floor(user.xp / 100) + 1;
-
-      // Se subiu de nível, notificar
-      if (novoLevel > user.level) {
-        user.level = novoLevel;
-        message.reply(
-          `🎉 Parabéns **${message.author.username}**! Você subiu para o **nível ${novoLevel}**!`,
-        );
-      }
-
-      // Atualizar data da última vez que ganhou XP
-      user.lastXpUpdate = new Date();
-
-      // Salvar no banco
       await user.save();
     } catch (error) {
-      console.error("❌ Erro ao ganhar XP:", error);
+      console.error("Erro ao processar XP:", error);
     }
   },
 };
